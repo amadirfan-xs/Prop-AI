@@ -1,0 +1,17 @@
+services:
+  frontend-user:
+    build:
+      context: .
+      dockerfile: dockerFile
+      args:
+        - NEXT_PUBLIC_API_URL=http://192.168.1.16:3000
+    container_name: pms-frontend-user
+    ports:
+      - "8000:8000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://192.168.1.16:3000
+    command: npm run start -- -p 8000 -H 0.0.0.0
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next

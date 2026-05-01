@@ -72,18 +72,11 @@ export class AuthController {
   ): Promise<{ accessToken: string; isTempPasswordUsed: boolean }> {
     const response = request.res;
     const result = await this.authService.login(body);
-    const origin = request.headers.origin || '';
-    const isSecure = origin.startsWith('https');
-    // Extract the hostname (IP) from the origin to use as the cookie domain
-    const domain = origin.split('://')[1]?.split(':')[0];
-
     response.cookie('auth_token', result.accessToken, {
       httpOnly: true,
-      secure: isSecure || false,
-      sameSite: isSecure ? 'none' : 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',
-      domain: domain || undefined, // Explicitly tie it to the IP
     });
     return result;
   }

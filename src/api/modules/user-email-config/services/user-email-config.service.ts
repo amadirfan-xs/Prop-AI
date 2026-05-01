@@ -22,6 +22,10 @@ export class UserEmailConfigService {
       email: dto.email,
       encryptedAppPassword: encryptedData,
       iv,
+      configType: dto.configType,
+      host: dto.host,
+      port: dto.port,
+      secure: dto.secure,
     });
     
     return this.repository.save(config);
@@ -35,6 +39,7 @@ export class UserEmailConfigService {
       id: c.id,
       appName: c.appName,
       email: c.email,
+      configType: c.configType,
       createdAt: c.createdAt,
     }));
   }
@@ -50,6 +55,11 @@ export class UserEmailConfigService {
     
     if (dto.appName) config.appName = dto.appName;
     if (dto.email) config.email = dto.email;
+    if (dto.configType) config.configType = dto.configType;
+    if (dto.host !== undefined) config.host = dto.host;
+    if (dto.port !== undefined) config.port = dto.port;
+    if (dto.secure !== undefined) config.secure = dto.secure;
+
     if (dto.appPassword) {
       const { encryptedData, iv } = this.encryptionService.encrypt(dto.appPassword);
       config.encryptedAppPassword = encryptedData;

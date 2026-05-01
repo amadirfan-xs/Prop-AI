@@ -74,4 +74,17 @@ export class StripeService {
     const webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET');
     return this.stripe.webhooks.constructEvent(payload, signature, webhookSecret || '');
   }
+
+  async getReceiptUrl(paymentIntentId: string): Promise<string | null> {
+    if (!paymentIntentId) return null;
+    try {
+      const intent = await this.stripe.paymentIntents.retrieve(paymentIntentId, {
+        expand: ['latest_charge'],
+      });
+      return intent.latest_charge?.receipt_url || null;
+    } catch (error) {
+      this.logger.error(`Failed to fetch receipt URL for intent ${paymentIntentId}`, error);
+      return null;
+    }
+  }
 }

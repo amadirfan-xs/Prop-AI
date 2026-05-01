@@ -19,7 +19,6 @@ import { SocialPostingModule } from '@/api/modules/social-posting/social-posting
 import { PricingModule } from '@/api/modules/pricing/pricing.module';
 import { PublicPropertyController } from '@/api/modules/property/controllers/public-property.controller';
 import { propertyProviders } from '@/common/providers/property.providers';
-import { NotificationModule } from '@/api/modules/notification/notification.module';
 
 @Module({
   imports: [
@@ -30,7 +29,6 @@ import { NotificationModule } from '@/api/modules/notification/notification.modu
     MailModule,
     SocialPostingModule,
     PricingModule,
-    NotificationModule,
   ],
   controllers: [PropertyController, PublicPropertyController],
   providers: [

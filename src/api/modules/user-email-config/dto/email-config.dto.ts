@@ -12,10 +12,28 @@ export class CreateEmailConfigDto {
   @IsEmail()
   email: string;
 
-  @ApiProperty({ description: 'The Google App Password' })
+  @ApiProperty({ description: 'The Google App Password or SMTP password' })
   @IsNotEmpty()
   @IsString()
   appPassword: string;
+
+  @ApiProperty({ description: 'Type of configuration: app_password or smtp', enum: ['app_password', 'smtp'] })
+  @IsNotEmpty()
+  @IsString()
+  configType: string;
+
+  @ApiPropertyOptional({ description: 'SMTP host' })
+  @IsOptional()
+  @IsString()
+  host?: string;
+
+  @ApiPropertyOptional({ description: 'SMTP port' })
+  @IsOptional()
+  port?: number;
+
+  @ApiPropertyOptional({ description: 'SMTP secure' })
+  @IsOptional()
+  secure?: boolean;
 }
 
 export class UpdateEmailConfigDto {
@@ -33,4 +51,22 @@ export class UpdateEmailConfigDto {
   @IsOptional()
   @IsString()
   appPassword?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  configType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  host?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  port?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  secure?: boolean;
 }

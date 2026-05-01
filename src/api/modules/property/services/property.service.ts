@@ -12,7 +12,6 @@ import { randomBytes, randomUUID, scryptSync } from 'crypto';
 import { existsSync } from 'fs';
 import { Request, Response } from 'express';
 import { NodeMailerService } from '@/api/modules/infrastructure/services/node-mailer.service';
-import { VideoProcessingService } from '@/api/modules/infrastructure/services/video-processing.service';
 import { UserAccountService } from '@/api/modules/user/services/user-account.service';
 import { InvitePropertyStakeholderDto } from '@/api/modules/property/dto/invite-property-stakeholder.dto';
 import { ContractGateway } from '@/api/modules/property/gateways/contract.gateway';
@@ -21,7 +20,6 @@ import { PropertyPurchaseContractRepository } from '@/api/modules/property/repos
 import { PropertyRepository } from '@/api/modules/property/repositories/property.repository';
 import { PropertyStakeholderRepository } from '@/api/modules/property/repositories/property-stakeholder.repository';
 import type { CreatePropertyInput } from '@/api/modules/property/types/property-service.types';
-import { PropertyStatus } from '@/api/modules/property/types/property-status.enum';
 import { PropertyPurchaseContractSource } from '@/api/modules/property/types/property-purchase-contract-source.enum';
 import type {
   PropertyMediaKeys,
@@ -32,6 +30,7 @@ import { AppwriteService } from '@/common/services/appwrite/appwrite.service';
 import { PropertyActivityRepository } from '@/api/modules/property/repositories/property-activity.repository';
 import { PropertySocialPostRepository } from '@/api/modules/social-posting/repositories/property-social-post.repository';
 import type { PropertyEntity } from '@/common/entities/property/property.entity';
+import type { PropertyStatus } from '@/api/modules/property/types/property-status.enum';
 import type { ListMyPropertiesDto } from '@/api/modules/property/dto/list-my-properties.dto';
 import { FulfillmentStatus } from '@/api/modules/property/types/fulfillment-status.enum';
 import { ContractDecision } from '@/api/modules/property/types/contract-decision.enum';
@@ -43,7 +42,6 @@ import { PricingService } from '@/api/modules/pricing/pricing.service';
 import { UserTypes } from '@/common/enums/user-types';
 import { Subject, Observable } from 'rxjs';
 import { filter, map } from 'rxjs/operators';
-import { NotificationService } from '@/api/modules/notification/services/notification.service';
 import * as geoip from 'geoip-lite';
 
 const MAX_PROPERTY_IMAGES = 10;
@@ -70,8 +68,6 @@ export class PropertyService {
     private readonly propertyQrScanRepository: PropertyQrScanRepository,
     private readonly propertyInquiryRepository: PropertyInquiryRepository,
     private readonly pricingService: PricingService,
-    private readonly notificationService: NotificationService,
-    private readonly videoProcessingService: VideoProcessingService,
   ) { }
 
   async createProperty(
@@ -107,28 +103,6 @@ export class PropertyService {
       description: `Property listing "${property.property_title}" was created.`,
       metadata: { title: property.property_title },
     });
-
-    // Notify Agent
-    await this.notificationService.createNotification(agentUserId, {
-      type: 'PROPERTY_CREATED',
-      title: 'Property Created',
-      message: `Your property listing "${property.property_title}" has been created successfully.`,
-      metadata: { propertyId: property.id },
-    });
-
-    // Notify Org Admins
-    if (property.organization_id) {
-      const admins = await this.userAccountService.findOrgAdmins(property.organization_id);
-      for (const admin of admins) {
-        if (admin.id === agentUserId) continue; // Don't notify agent twice
-        await this.notificationService.createNotification(admin.id, {
-          type: 'PROPERTY_CREATED',
-          title: 'New Property Listing',
-          message: `${agent?.name || 'An agent'} created a new property: "${property.property_title}".`,
-          metadata: { propertyId: property.id },
-        });
-      }
-    }
 
     return {
       id: property.id,
@@ -284,13 +258,9 @@ export class PropertyService {
       await this.propertyStakeholderRepository.listByPropertyId(propertyId);
 
   
-    const stakeholderUserIds = [
-      ...new Set([
-        ...stakeholderEntities.map((s) => s.user_id),
-        property.agent_user_id,
-      ]),
-    ].filter((id) => id > 0);
-    
+    const stakeholderUserIds = stakeholderEntities
+      .map((s) => s.user_id)
+      .filter((id) => id > 0);
     const users = await this.userAccountService.listByIds(stakeholderUserIds);
     const userMap = new Map(users.map((u) => [u.id, u]));
 
@@ -329,56 +299,29 @@ export class PropertyService {
       created_at: property.created_at,
       updated_at: property.updated_at,
       property_media: media,
-      stakeholders: [
-        // Include Listing Agent
-        await (async () => {
-          const u = userMap.get(property.agent_user_id);
-          return {
-            id: 0, // System-assigned ID for the listing agent row
-            user: {
-              id: property.agent_user_id,
-              name: u?.name || 'Listing Agent',
-              email: u?.email || '',
-              profile_image_url: u?.profilePictureUrl
-                ? await this.appwriteService.getSignedURL(u.profilePictureUrl)
-                : null,
-              phone_number: u?.phoneNumber || null,
-            },
-            userType: {
-              id: u?.userTypeId || 1,
-              name: 'Listing Agent',
-            },
-            status: 'Active',
-          };
-        })(),
-        ...await Promise.all(
-          stakeholderEntities.map(async (s) => {
-            const u = userMap.get(s.user_id);
-            return {
-              id: s.id,
-              user: {
-                id: s.user_id,
-                name: s.name,
-                email: s.email,
-                profile_image_url: u?.profilePictureUrl
-                  ? await this.appwriteService.getSignedURL(u.profilePictureUrl)
-                  : null,
-                phone_number: u?.phoneNumber || null,
-              },
-              userType: {
-                id: s.user_type_id,
-                name:
-                  s.user_type_id === 2
-                    ? 'Seller'
-                    : s.user_type_id === 3
-                    ? 'Buyer'
-                    : s.user_type,
-              },
-              status: s.invite_status,
-            };
-          }),
-        ),
-      ],
+      stakeholders: stakeholderEntities.map((s) => {
+        const u = userMap.get(s.user_id);
+        return {
+          id: s.id,
+          user: {
+            id: s.user_id,
+            name: s.name,
+            email: s.email,
+            profile_image_url: u?.profilePictureUrl || null,
+            phone_number: null,
+          },
+          userType: {
+            id: s.user_type_id,
+            name:
+              s.user_type_id === 2
+                ? 'Seller'
+                : s.user_type_id === 3
+                ? 'Buyer'
+                : s.user_type,
+          },
+          status: s.invite_status,
+        };
+      }),
       marketing_schedule,
       contract_status: latestContract
         ? {
@@ -422,7 +365,6 @@ export class PropertyService {
       id: t.id,
       platform: t.platform,
       scheduled_for: t.scheduled_for,
-      created_at: t.created_at,
       status: t.status,
     }));
   }
@@ -580,6 +522,7 @@ export class PropertyService {
       pdfBuffer = file.buffer;
     } else {
       source = PropertyPurchaseContractSource.HTML;
+      // Generate PDF by default for HTML contracts to ensure the file exists in storage
       if (body.generatePdf !== false) {
           pdfBuffer = await this.convertHtmlToPdfBuffer(htmlContent as string);
       }
@@ -590,6 +533,7 @@ export class PropertyService {
 
     const key = canUpdate ? latest.document_key : this.buildPurchaseContractKey(propertyId);
     
+    // Only upload to S3 if we have a buffer (PDF upload or explicit PDF generation requested)
     if (pdfBuffer) {
         await this.appwriteService.uploadPDF(pdfBuffer, key);
     }
@@ -614,8 +558,7 @@ export class PropertyService {
         throw new InternalServerErrorException('Failed to save contract version');
     }
 
-    // Move property out of draft and into Active status since it has a contract
-    await this.propertyRepository.updateStatus(propertyId, PropertyStatus.ACTIVE);
+    await this.propertyRepository.activatePropertyIfDraft(propertyId);
     await this.syncPropertyFulfillmentStatus(propertyId);
 
     await this.propertyActivityRepository.logActivity({
@@ -626,49 +569,11 @@ export class PropertyService {
       metadata: { source },
     });
 
-    const stakeholders = await this.propertyStakeholderRepository.listByPropertyId(propertyId);
-    const notifiedUserIds = new Set<number>([agentUserId]);
-
-    // Notify Agent
-    await this.notificationService.createNotification(agentUserId, {
-        type: 'CONTRACT_UPLOADED',
-        title: 'Contract Drafted',
-        message: `The purchase contract for ${property.property_title} has been successfully uploaded/drafted.`,
-        metadata: { propertyId, contractId: saved.id }
-    });
-
-    // Notify Stakeholders (Buyer/Seller)
-    for (const stakeholder of stakeholders) {
-        if (notifiedUserIds.has(stakeholder.user_id)) continue;
-        await this.notificationService.createNotification(stakeholder.user_id, {
-            type: 'CONTRACT_UPLOADED',
-            title: 'New Contract for Review',
-            message: `A new purchase contract for ${property.property_title} is ready for your review.`,
-            metadata: { propertyId, contractId: saved.id }
-        });
-        notifiedUserIds.add(stakeholder.user_id);
-    }
-
-    // Notify Org Admins
-    if (property.organization_id) {
-        const admins = await this.userAccountService.findOrgAdmins(property.organization_id);
-        for (const admin of admins) {
-            if (notifiedUserIds.has(admin.id)) continue;
-            await this.notificationService.createNotification(admin.id, {
-                type: 'CONTRACT_UPLOADED',
-                title: 'New Property Contract',
-                message: `A contract has been initiated for property: ${property.property_title}.`,
-                metadata: { propertyId, contractId: saved.id }
-            });
-            notifiedUserIds.add(admin.id);
-        }
-    }
-
+    // Notify all stakeholders in real-time
     this.contractGateway.emitContractUpdate(propertyId, 'versionUpdated', {
         versionId: saved.id,
         status: saved.status,
-        source: saved.input_source,
-        actorId: agentUserId
+        source: saved.input_source
     });
 
     return {
@@ -755,6 +660,7 @@ export class PropertyService {
         return Promise.all(
             versions.map(async (v) => {
                 const decisions = await this.propertyPurchaseContractDecisionRepository.listByContractId(v.id);
+                // Also fetch stakeholder names for better tracking
                 const populatedDecisions = await Promise.all(decisions.map(async d => {
                     const stakeholder = stakeholders.find(s => s.user_id === d.user_id);
                     return {
@@ -818,6 +724,7 @@ export class PropertyService {
             throw new ForbiddenException('You are not a stakeholder for this property');
         }
 
+        // Check if user has already rejected - if so, they are blocked until a new version is made
         const existingDecisions = await this.propertyPurchaseContractDecisionRepository.listByContractId(latest.id);
         const userDecision = existingDecisions.find(d => d.user_id === userId);
         
@@ -832,6 +739,7 @@ export class PropertyService {
             comment: body.comment
         });
 
+        // Update version status based on decisions
         let newStatus = PropertyPurchaseContractStatus.PENDING;
         if (body.decision === ContractDecision.REJECT) {
             newStatus = PropertyPurchaseContractStatus.REJECTED;
@@ -839,6 +747,8 @@ export class PropertyService {
             newStatus = PropertyPurchaseContractStatus.REQUESTED_CHANGES;
         }
 
+        // Only update status if it's more 'severe' than current (e.g. REJECTED overrides REQUESTED_CHANGES)
+        // For simplicity, we prioritize REJECTED > REQUESTED_CHANGES > PENDING
         if (newStatus !== PropertyPurchaseContractStatus.PENDING) {
             await this.propertyPurchaseContractRepository.updateVersion(latest.id, { status: newStatus });
         }
@@ -956,9 +866,6 @@ export class PropertyService {
         
         if (allApproved) {
             await this.propertyPurchaseContractRepository.updateVersion(contractId, { status: PropertyPurchaseContractStatus.APPROVED });
-            // Set property status to COMPLETED when consensus is reached
-            await this.propertyRepository.updateStatus(propertyId, PropertyStatus.COMPLETED);
-            
             await this.propertyActivityRepository.logActivity({
                 property_id: propertyId,
                 actor_id: 0, // System
@@ -1067,6 +974,7 @@ export class PropertyService {
         inviteStatus,
       });
 
+    // Update last_invite_sent_at
     await this.propertyStakeholderRepository.updateInviteTimestamp(stakeholder.id);
 
     await this.propertyRepository.activatePropertyIfDraft(propertyId);
@@ -1080,13 +988,6 @@ export class PropertyService {
       metadata: { name: normalizedName, email: normalizedEmail, role: body.userType },
     });
 
-    await this.notificationService.createNotification(userId as number, {
-        type: 'PROPERTY_INVITE',
-        title: 'Property Invitation',
-        message: `You have been invited to participate in the property: ${property.property_title}`,
-        metadata: { propertyId, agentId: agentUserId }
-    });
-
     await this.nodeMailerService.sendEmail(
       normalizedEmail,
       'stakeholder-invite',
@@ -1098,7 +999,6 @@ export class PropertyService {
         propertyTitle: property.property_title,
         tempPassword,
         isExistingUser,
-        role: body.userTypeId === 2 ? 'Seller' : body.userTypeId === 3 ? 'Buyer' : (body.userType || 'Stakeholder'),
         loginUrl: `${process.env.BASE_URL_FRONTEND}/auth/login`,
         propertyPublicUrl: `${process.env.BASE_URL_FRONTEND}/publicView/property/${propertyId}`
       },
@@ -1136,6 +1036,11 @@ export class PropertyService {
         throw new BadRequestException(`Please wait ${diffMinutes} minutes before resending the invite`);
       }
     }
+
+    // Re-send email
+    // Note: We don't have the temp password here if it was already hashed. 
+    // Usually "Resend" either resets the password or provides a magic link.
+    // For now, we'll follow project pattern and assume the user can reset via "Forgot Password" or we send a generic re-invite.
     
     await this.nodeMailerService.sendEmail(
       stakeholder.email,
@@ -1144,7 +1049,7 @@ export class PropertyService {
       {
         recipientName: stakeholder.name,
         propertyId,
-        tempPassword: null,
+        tempPassword: null, // User already has an account set up
         isExistingUser: true,
       },
     );
@@ -1200,6 +1105,7 @@ export class PropertyService {
     );
   }
 
+  /** Supports new shape `{ originalKey }` and legacy rows with thumbnail keys. */
   private extractOriginalKey(item: unknown): string | null {
     if (!item || typeof item !== 'object') {
       return null;
@@ -1423,7 +1329,8 @@ export class PropertyService {
     try {
       const geo = geoip.lookup(ip);
       
-      const latitude = geo?.ll?.[0] || 37.7749;
+      // Fallback for local/unresolved IPs in development
+      const latitude = geo?.ll?.[0] || 37.7749; // Default to SF for mock
       const longitude = geo?.ll?.[1] || -122.4194;
       const city = geo?.city || 'San Francisco (Mock)';
       const country = geo?.country || 'US';
@@ -1440,6 +1347,7 @@ export class PropertyService {
       this.logger.log(`Recorded QR scan for property ${propertyId} from ${ip} (${city})`);
     } catch (error) {
       this.logger.error(`Failed to record QR scan: ${(error as any).message}`);
+      // Don't throw - we don't want to break the redirect if tracking fails
     }
   }
 
@@ -1463,6 +1371,7 @@ export class PropertyService {
 
     const agent = await this.userAccountService.findById(property.agent_user_id);
 
+    // Generate signed URLs for media
     const mediaWithUrls = await Promise.all(
       (property.property_media || []).map(async (item: any) => ({
         ...item,
@@ -1470,6 +1379,7 @@ export class PropertyService {
       })),
     );
 
+    // Return sanitized public data
     return {
       id: property.id,
       property_title: property.property_title,
@@ -1516,20 +1426,13 @@ export class PropertyService {
 
     await this.propertyActivityRepository.logActivity({
       property_id: propertyId,
-      actor_id: property.agent_user_id,
+      actor_id: property.agent_user_id, // Logged against agent since it's a lead for them
       event: 'New Inquiry',
       description: `New lead captured from ${input.first_name} ${input.last_name}.`,
       metadata: { 
         name: `${input.first_name} ${input.last_name}`,
         email: input.email 
       },
-    });
-
-    await this.notificationService.createNotification(property.agent_user_id, {
-        type: 'NEW_INQUIRY',
-        title: 'New Lead Captured',
-        message: `You received a new inquiry from ${input.first_name} for ${property.property_title}.`,
-        metadata: { propertyId, inquiryId: saved.id }
     });
 
     return { message: 'Inquiry submitted successfully' };
@@ -1554,48 +1457,8 @@ export class PropertyService {
     );
   }
 
-  async getDashboardAnalytics(userId: number, roleId?: number) {
-    const user = await this.userAccountService.findById(userId);
-    return this.propertyRepository.getDashboardAnalytics(userId, roleId, user?.organizationId ?? undefined);
-  }
-
-  async generatePropertyVideo(agentUserId: number, propertyId: number): Promise<{ originalKey: string; signedUrl: string }> {
-    const property = await this.propertyRepository.findByIdAndAgent(propertyId, agentUserId);
-    if (!property) {
-      throw new NotFoundException('Property not found or you are not the owner');
-    }
-
-    if (!property.property_media || property.property_media.length === 0) {
-      throw new BadRequestException('No images available for this property to generate a video');
-    }
-
-    // 1. Get signed URLs for all images
-    const signedUrls = await Promise.all(
-      property.property_media.map((media) => this.appwriteService.getSignedURL(media.originalKey))
-    );
-
-    const validSignedUrls = signedUrls.filter((url): url is string => url !== null);
-
-    if (validSignedUrls.length === 0) {
-      throw new InternalServerErrorException('Failed to generate signed URLs for images');
-    }
-
-    // 2. Generate video
-    const videoKey = await this.videoProcessingService.createVideoFromImages(validSignedUrls, propertyId);
-
-    // 3. Attach video to property media
-    await this.propertyRepository.appendPropertyMedia(propertyId, agentUserId, [
-      {
-        originalKey: videoKey
-      }
-    ]);
-
-    // 4. Return signed URL for the new video
-    const signedUrl = await this.appwriteService.getSignedURL(videoKey);
-
-    return {
-      originalKey: videoKey,
-      signedUrl: signedUrl || '',
-    };
+  async getDashboardStats(userId: number, roleId?: number) {
+    this.assertValidAgent(userId);
+    return this.propertyRepository.getDashboardAnalytics(userId, roleId);
   }
 }

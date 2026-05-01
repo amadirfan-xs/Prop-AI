@@ -5,12 +5,14 @@ import { CoreModule } from '@/api/modules/core/core.module';
 import { PermissionModule } from '@/api/modules/permission/permission.module';
 import { JwtModule } from '@nestjs/jwt';
 import { StripeService } from '@/api/modules/infrastructure/services/stripe.service';
+import { MailModule } from '@/api/modules/infrastructure/mail.module';
 
 @Module({
     imports: [
         JwtModule.register({}),
         CoreModule, 
-        PermissionModule
+        PermissionModule,
+        MailModule
     ],
     controllers: [PricingController],
     providers: [PricingService, StripeService],

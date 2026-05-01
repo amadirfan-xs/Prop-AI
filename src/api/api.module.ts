@@ -26,7 +26,6 @@ import { UserEmailConfigModule } from './modules/user-email-config/user-email-co
 import { MarketingCampaignModule } from './modules/marketing-campaign/marketing-campaign.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { AiModule } from './modules/ai/ai.module';
-import { NotificationModule } from './modules/notification/notification.module';
 
 @Module({
   imports: [
@@ -34,13 +33,13 @@ import { NotificationModule } from './modules/notification/notification.module';
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: envValidationSchema,
-      expandVariables: true,
     }),
     DatabaseModule.forRoot(),
     BullModule.forRoot({
       connection: {
         host: process.env.REDIS_HOST || 'redis',
         port: Number(process.env.REDIS_PORT || 6379),
+        password: process.env.REDIS_PASSWORD,
       },
     }),
     ScheduleModule.forRoot(),
@@ -56,7 +55,6 @@ import { NotificationModule } from './modules/notification/notification.module';
     PricingModule,
     OrganizationModule,
     AiModule,
-    NotificationModule,
   ],
   providers: [
     JsonBodyMiddleware,

@@ -5,22 +5,28 @@ export class CompleteOrganizationTable1776686500001 implements MigrationInterfac
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         // Add missing columns
-        await queryRunner.query(`ALTER TABLE "organization" ADD "submittedByAgentId" integer`);
-        await queryRunner.query(`ALTER TABLE "organization" ADD "contactName" character varying(255)`);
-        await queryRunner.query(`ALTER TABLE "organization" ADD "contactEmail" character varying(255)`);
-        await queryRunner.query(`ALTER TABLE "organization" ADD "contactPhone" character varying(50)`);
-        await queryRunner.query(`ALTER TABLE "organization" ADD "contactJobTitle" character varying(150)`);
-        await queryRunner.query(`ALTER TABLE "organization" ADD "numAgents" integer`);
-        await queryRunner.query(`ALTER TABLE "organization" ADD "numListings" integer`);
-        await queryRunner.query(`ALTER TABLE "organization" ADD "logoUrl" text`);
-        await queryRunner.query(`ALTER TABLE "organization" ADD "websiteUrl" character varying(255)`);
-        await queryRunner.query(`ALTER TABLE "organization" ADD "additionalNotes" text`);
+        await queryRunner.query(`ALTER TABLE "organization" ADD COLUMN IF NOT EXISTS "submittedByAgentId" integer`);
+        await queryRunner.query(`ALTER TABLE "organization" ADD COLUMN IF NOT EXISTS "contactName" character varying(255)`);
+        await queryRunner.query(`ALTER TABLE "organization" ADD COLUMN IF NOT EXISTS "contactEmail" character varying(255)`);
+        await queryRunner.query(`ALTER TABLE "organization" ADD COLUMN IF NOT EXISTS "contactPhone" character varying(50)`);
+        await queryRunner.query(`ALTER TABLE "organization" ADD COLUMN IF NOT EXISTS "contactJobTitle" character varying(150)`);
+        await queryRunner.query(`ALTER TABLE "organization" ADD COLUMN IF NOT EXISTS "numAgents" integer`);
+        await queryRunner.query(`ALTER TABLE "organization" ADD COLUMN IF NOT EXISTS "numListings" integer`);
+        await queryRunner.query(`ALTER TABLE "organization" ADD COLUMN IF NOT EXISTS "logoUrl" text`);
+        await queryRunner.query(`ALTER TABLE "organization" ADD COLUMN IF NOT EXISTS "websiteUrl" character varying(255)`);
+        await queryRunner.query(`ALTER TABLE "organization" ADD COLUMN IF NOT EXISTS "additionalNotes" text`);
 
         // Fix primaryColor length
         await queryRunner.query(`ALTER TABLE "organization" ALTER COLUMN "primaryColor" TYPE character varying(50)`);
 
-        // Add unique constraint
-        await queryRunner.query(`ALTER TABLE "organization" ADD CONSTRAINT "UQ_submitted_by_agent" UNIQUE ("submittedByAgentId")`);
+        // Add unique constraint only if it doesn't exist
+        const constraintExists = await queryRunner.query(`
+            SELECT 1 FROM information_schema.table_constraints 
+            WHERE constraint_name = 'UQ_submitted_by_agent' AND table_name = 'organization'
+        `);
+        if (constraintExists.length === 0) {
+            await queryRunner.query(`ALTER TABLE "organization" ADD CONSTRAINT "UQ_submitted_by_agent" UNIQUE ("submittedByAgentId")`);
+        }
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {

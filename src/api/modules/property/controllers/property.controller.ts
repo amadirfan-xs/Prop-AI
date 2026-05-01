@@ -475,20 +475,6 @@ export class PropertyController {
     @Query('roleId') roleId?: number,
   ) {
     const userId = Number(request.user?.id);
-    return this.propertyService.getDashboardAnalytics(userId, roleId ? Number(roleId) : undefined);
-  }
-
-  @ApiOperation({ summary: 'Generate a video slideshow from property images' })
-  @ApiParam({ name: 'propertyId', type: Number })
-  @ApiOkResponse({ description: 'Video generated successfully' })
-  @Post(':propertyId/generate-video')
-  @RegisterPermissions()
-  @UseGuards(AccessTokenAuthGuard, PermissionGuard)
-  generateVideo(
-    @Req() request: AuthenticatedRequest,
-    @Param('propertyId', ParseIntPipe) propertyId: number,
-  ): Promise<{ originalKey: string; signedUrl: string }> {
-    const agentUserId = Number(request.user?.id);
-    return this.propertyService.generatePropertyVideo(agentUserId, propertyId);
+    return this.propertyService.getDashboardStats(userId, roleId);
   }
 }

@@ -53,12 +53,24 @@ export class CampaignProcessor extends WorkerHost {
         campaign.emailConfig.iv
       );
 
-      // Create dynamic transporter
+     
+      const host = campaign.emailConfig.host || 'smtp.gmail.com';
+      const port = Number(campaign.emailConfig.port || 587);
+      
+      const isSecure = port === 465;
+
       const transporter = nodemailer.createTransport({
-        service: 'gmail', // Assuming Gmail for now as per project context, can be modernized later
+        host,
+        port,
+        secure: isSecure,
+        requireTLS: port === 587,
         auth: {
           user: campaign.emailConfig.email,
           pass: decryptedPassword,
+        },
+        tls: {
+          rejectUnauthorized: false,
+          minVersion: 'TLSv1.2'
         },
       });
 

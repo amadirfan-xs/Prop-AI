@@ -284,13 +284,8 @@ export class PropertyRepository {
     await this.propertyEntityRepository.update(propertyId, { fulfillment_status: status });
   }
 
-  async updateStatus(propertyId: number, status: PropertyStatus): Promise<void> {
-    await this.propertyEntityRepository.update(propertyId, { status });
-  }
-
-  async getDashboardAnalytics(userId: number, roleId?: number, organizationId?: number) {
-    const isAgent = Number(roleId) === 1 || Number(roleId) === 5;
-    const isOrgOwner = Number(roleId) === 4;
+  async getDashboardAnalytics(userId: number, roleId?: number) {
+    const isAgent = !roleId || Number(roleId) === 1 || Number(roleId) === 5;
 
     const query = this.propertyEntityRepository
       .createQueryBuilder('property')
@@ -298,14 +293,12 @@ export class PropertyRepository {
       .addSelect('COUNT(*)', 'count')
       .groupBy('property.status');
 
-    if (isOrgOwner && organizationId) {
-      query.where('property.organization_id = :organizationId', { organizationId });
-    } else if (isAgent) {
+    if (isAgent) {
       query.where('property.agent_user_id = :userId', { userId });
     } else {
       query.where(
-        'property.id IN (SELECT stakeholder.property_id FROM property_stakeholders stakeholder WHERE stakeholder.user_id = :userId)',
-        { userId },
+        'property.id IN (SELECT stakeholder.property_id FROM property_stakeholders stakeholder WHERE stakeholder.user_id = :userId AND stakeholder.user_type_id = :roleId)',
+        { userId, roleId },
       );
     }
 
@@ -332,15 +325,12 @@ export class PropertyRepository {
       .select("TO_CHAR(property.created_at, 'Mon')", 'month')
       .addSelect("TO_CHAR(property.created_at, 'MM')", 'monthNum')
       .addSelect('COUNT(*)', 'value')
-      
-    if (isOrgOwner && organizationId) {
-      trendQuery.where('property.organization_id = :organizationId', { organizationId });
-    } else if (isAgent) {
+    if (isAgent) {
       trendQuery.where('property.agent_user_id = :userId', { userId });
     } else {
       trendQuery.where(
-        'property.id IN (SELECT stakeholder.property_id FROM property_stakeholders stakeholder WHERE stakeholder.user_id = :userId)',
-        { userId },
+        'property.id IN (SELECT stakeholder.property_id FROM property_stakeholders stakeholder WHERE stakeholder.user_id = :userId AND stakeholder.user_type_id = :roleId)',
+        { userId, roleId },
       );
     }
 

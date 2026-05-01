@@ -63,11 +63,4 @@ export class UserAccountService {
   findUsersByRole(roleId: number): Promise<UserEntity[]> {
     return this.userRepository.findUsersByRole(roleId);
   }
-
-  async findOrgAdmins(organizationId: number): Promise<UserEntity[]> {
-    return this.userRepository.findUsersByOrgAndRole(
-      organizationId,
-      UserTypes.ORGANIZATION_OWNER,
-    );
-  }
 }

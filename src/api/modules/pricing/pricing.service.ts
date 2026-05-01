@@ -6,6 +6,7 @@ import { UserSubscriptionEntity } from '@/common/entities/user/user-subscription
 import { PaymentEntity } from '@/common/entities/pricing/payment.entity';
 import { PropertyEntity } from '@/common/entities/property/property.entity';
 import { StripeService } from '../infrastructure/services/stripe.service';
+import { NodeMailerService } from '../infrastructure/services/node-mailer.service';
 
 @Injectable()
 export class PricingService {
@@ -17,6 +18,7 @@ export class PricingService {
     constructor(
         @Inject(DATA_SOURCE) private readonly dataSource: DataSource,
         private readonly stripeService: StripeService,
+        private readonly nodeMailerService: NodeMailerService,
     ) {
         this.packageRepository = this.dataSource.getRepository(PricingPackageEntity);
         this.subscriptionRepository = this.dataSource.getRepository(UserSubscriptionEntity);
@@ -64,18 +66,52 @@ export class PricingService {
         const userId = parseInt(session.metadata.userId, 10);
 
         if (event.type === 'checkout.session.completed') {
+            const customerEmail = session.customer_details?.email || session.customer_email;
+            
             if (session.metadata.type === 'subscription_upgrade') {
                 const packageId = parseInt(session.metadata.packageId, 10);
                 this.logger.log(`Upgrading user ${userId} to package ${packageId}`);
-                await this.activatePremiumSubscription(userId, packageId);
+                const subscription = await this.activatePremiumSubscription(userId, packageId);
                 
                 await this.logPayment(userId, session, 'subscription');
+
+                // Send Confirmation Email
+                const receiptUrl = await this.stripeService.getReceiptUrl(session.payment_intent);
+
+                await this.nodeMailerService.sendMail({
+                    to: customerEmail,
+                    subject: 'Your Subscription has been Updated!',
+                    html: `
+                        <h1>Payment Successful!</h1>
+                        <p>Thank you for your purchase. Your account has been upgraded to the <strong>${subscription?.package?.name || 'Premium Plan'}</strong>.</p>
+                        <p><strong>Amount Paid:</strong> ${session.amount_total / 100} ${session.currency.toUpperCase()}</p>
+                        ${receiptUrl ? `<p>You can view your receipt here: <a href="${receiptUrl}">${receiptUrl}</a></p>` : ''}
+                        <p>Your subscription is now active${subscription?.endDate ? ` until ${subscription.endDate.toLocaleDateString()}` : ''}.</p>
+                        <p>Best regards,<br>PropAI Team</p>
+                    `
+                });
             } else if (session.metadata.type === 'extra_slots_purchase') {
                 const quantity = parseInt(session.metadata.quantity, 10);
                 this.logger.log(`Adding ${quantity} slots for user ${userId}`);
                 await this.addExtraSlots(userId, quantity);
                 
                 await this.logPayment(userId, session, 'overage');
+
+                // Send Confirmation Email
+                const receiptUrl = await this.stripeService.getReceiptUrl(session.payment_intent);
+
+                await this.nodeMailerService.sendMail({
+                    to: customerEmail,
+                    subject: 'Extra Slots Added to Your Account',
+                    html: `
+                        <h1>Payment Successful!</h1>
+                        <p>You have successfully purchased <strong>${quantity} extra property slots</strong>.</p>
+                        <p><strong>Amount Paid:</strong> ${session.amount_total / 100} ${session.currency.toUpperCase()}</p>
+                        ${receiptUrl ? `<p>You can view your receipt here: <a href="${receiptUrl}">${receiptUrl}</a></p>` : ''}
+                        <p>These slots have been added to your current subscription.</p>
+                        <p>Best regards,<br>PropAI Team</p>
+                    `
+                });
             }
         }
 
@@ -145,7 +181,11 @@ export class PricingService {
             endDate
         });
 
-        return this.subscriptionRepository.save(subscription);
+        const saved = await this.subscriptionRepository.save(subscription);
+        return this.subscriptionRepository.findOne({
+            where: { id: saved.id },
+            relations: ['package']
+        });
     }
 
     async activateFreeSubscription(userId: number, packageId: number) {
@@ -172,7 +212,11 @@ export class PricingService {
             endDate
         });
 
-        return this.subscriptionRepository.save(subscription);
+        const saved = await this.subscriptionRepository.save(subscription);
+        return this.subscriptionRepository.findOne({
+            where: { id: saved.id },
+            relations: ['package']
+        });
     }
 
     async getPaymentHistory(userId: number): Promise<PaymentEntity[]> {

@@ -174,18 +174,14 @@ export class AuthService {
       id: user.id,
       name: user.name,
       email: user.email,
-      profilePictureUrl: user.profilePictureUrl
-        ? await this.appwriteService.getSignedURL(user.profilePictureUrl)
-        : null,
+      profilePictureUrl: user.profilePictureUrl ? await this.appwriteService.getSignedURL(user.profilePictureUrl) : null,
       primaryRole: role,
       roles,
       phoneNumber: user.phoneNumber,
       address: user.address,
-      calendlyUrl: user.calendlyUrl,
       currentSubscription,
       organization,
       organizationSubscription,
-      isTempPasswordUsed: Boolean(user.tempPassword),
     };
   }
 
@@ -435,13 +431,13 @@ export class AuthService {
       }
     }
 
-    user.passwordHash = this.hashPassword(newPassword);
+    await this.userAccountService.updatePassword({
+      userId,
+      passwordHash: this.hashPassword(newPassword),
+    });
+
     user.status = 'ACTIVE';
     user.tempPassword = null;
-    user.verified = true;
-    user.resetPIN = null;
-    user.resetPINExpirationAt = null;
-    
     await this.userAccountService.save(user);
 
     if (markStakeholderCompleted) {

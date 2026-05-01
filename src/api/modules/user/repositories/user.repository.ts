@@ -112,10 +112,4 @@ export class UserRepository {
       where: { userTypeId: roleId },
     });
   }
-
-  async findUsersByOrgAndRole(organizationId: number, roleId: number): Promise<UserEntity[]> {
-    return this.userEntityRepository.find({
-      where: { organizationId, userTypeId: roleId },
-    });
-  }
 }

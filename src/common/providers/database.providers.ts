@@ -24,10 +24,10 @@ import { PricingPackageEntity } from '@/common/entities/pricing/pricing-package.
 import { UserSubscriptionEntity } from '@/common/entities/user/user-subscription.entity';
 import { PropertyQrScanEntity } from '@/common/entities/property/property-qr-scan.entity';
 import { PropertyInquiryEntity } from '@/common/entities/property/property-inquiry.entity';
-import { DATA_SOURCE, MARKETING_CAMPAIGN_REPOSITORY, MARKETING_TEMPLATE_REPOSITORY, NOTIFICATION_REPOSITORY } from '@/common/enums/repositories';
+import { NotificationEntity } from '@/api/modules/notification/entities/notification.entity';
+import { DATA_SOURCE, MARKETING_CAMPAIGN_REPOSITORY, MARKETING_TEMPLATE_REPOSITORY } from '@/common/enums/repositories';
 import { OrganizationEntity } from '@/common/entities/organization/organization.entity';
 import { PaymentEntity } from '@/common/entities/pricing/payment.entity';
-import { NotificationEntity } from '@/api/modules/notification/entities/notification.entity';
 
 export const databaseProviders = [
   {
@@ -92,11 +92,6 @@ export const databaseProviders = [
   {
     provide: MARKETING_TEMPLATE_REPOSITORY,
     useFactory: (dataSource: DataSource) => dataSource.getRepository(MarketingTemplateEntity),
-    inject: [DATA_SOURCE],
-  },
-  {
-    provide: NOTIFICATION_REPOSITORY,
-    useFactory: (dataSource: DataSource) => dataSource.getRepository(NotificationEntity),
     inject: [DATA_SOURCE],
   },
 ];

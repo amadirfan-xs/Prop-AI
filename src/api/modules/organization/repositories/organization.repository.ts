@@ -51,9 +51,9 @@ export class OrganizationRepository {
     propertyStats.forEach(s => {
       const cnt = parseInt(s.count, 10);
       stats.TOTAL_PROPERTIES += cnt;
-      if (s.status === 'Active') stats.ACTIVE_LISTINGS = cnt;
-      if (s.status === 'Completed') stats.COMPLETED_DEALS = cnt;
-      if (s.status === 'Pending') stats.PENDING_CONTRACTS = cnt;
+      if (s.status === 'ACTIVE') stats.ACTIVE_LISTINGS = cnt;
+      if (s.status === 'COMPLETED') stats.COMPLETED_DEALS = cnt;
+      if (s.status === 'PENDING') stats.PENDING_CONTRACTS = cnt;
     });
 
     // 2. Count agents
@@ -96,7 +96,7 @@ export class OrganizationRepository {
       .addSelect('u.email', 'email')
       .addSelect('u.profilePictureUrl', 'avatar')
       .addSelect('COUNT(p.id)', 'totalProperties')
-      .addSelect("COUNT(CASE WHEN p.status = 'Completed' THEN 1 END)", 'dealsClosed')
+      .addSelect("COUNT(CASE WHEN p.status = 'COMPLETED' THEN 1 END)", 'dealsClosed')
       .where('u.organizationId = :orgId', { orgId })
       .andWhere('u.userTypeId = :typeId', { typeId: UserTypes.ORG_AGENT })
       .groupBy('u.id, u.name, u.email, u.profilePictureUrl')
@@ -241,7 +241,7 @@ export class OrganizationRepository {
       .addSelect('u.status', 'status')
       .addSelect('u.verified', 'verified')
       .addSelect('COUNT(DISTINCT p.id)', 'properties')
-      .addSelect("COUNT(DISTINCT CASE WHEN p.status = 'Completed' THEN 1 END)", 'dealsClosed')
+      .addSelect("COUNT(DISTINCT CASE WHEN p.status = 'COMPLETED' THEN 1 END)", 'dealsClosed')
       .addSelect("COUNT(DISTINCT CASE WHEN s.user_type_id = 3 THEN s.id END)", 'buyers')
       .addSelect("COUNT(DISTINCT CASE WHEN s.user_type_id = 2 THEN s.id END)", 'sellers')
       .where('u.organizationId = :orgId', { orgId })
@@ -288,7 +288,7 @@ export class OrganizationRepository {
 
     result.activeProjects = await this.repository.manager.createQueryBuilder(PropertyEntity, 'p')
       .where('p.organization_id = :orgId', { orgId })
-      .andWhere('p.status = :status', { status: 'Active' })
+      .andWhere('p.status = :status', { status: 'ACTIVE' })
       .getCount();
 
     return result;
